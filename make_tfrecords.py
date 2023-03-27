@@ -12,6 +12,7 @@ from __future__ import print_function
 import tensorflow as tf
 import numpy as np
 from scipy.io import wavfile
+import scipy.signal as sps
 import argparse
 import timeit
 import sys
@@ -66,22 +67,40 @@ if __name__ == "__main__":
     def wav_processing(wav_file, tfrecords_file, window_size):
         
         sr, wav_samples = wavfile.read(wav_file)
-        if sr != 8000:
-            raise ValueError("Sampling rate is expected to be 8kHz!")
+
+        # print("*******{} {}*******\n".format(wav_samples.shape,wav_samples.dtype))
+        # print(wav_samples)
+        
+        if sr != 8000: #8000
+            print(sr)
+            factor = int (sr/8000)
+            # print("********{}********".format(factor))
+            wav_samples = sps.decimate(wav_samples,factor,ftype='fir')
+            wav_samples = wav_samples.astype(np.int16)
+            # print(wav_samples.shape)
+            # print("*******{} {}*******\n".format(wav_samples.shape,wav_samples.dtype))
+            # print(wav_samples)
+            # print("Has been downsampled to 8kHz!")
+            # raise ValueError("Sampling rate is expected to be 48kHz!")
             
         assert wav_samples.ndim == 1, "check the size of wav_data"
         num_samples = wav_samples.shape[0]
+        # print("***************winow_size: {}     num_samples: {}************\n".format( window_size,num_samples))
         if num_samples > window_size:
             num_slices = num_samples//window_size+1
             wav_samples = np.concatenate((wav_samples, wav_samples), axis=0)
             wav_samples = wav_samples[0:window_size*num_slices]
             
             wav_slices = np.reshape(wav_samples, newshape=(num_slices, window_size))
+            # print("***************wav_slices: {}************\n".format( wav_slices.shape))
             for wav_slice in wav_slices:
                 if np.mean(np.abs(wav_slice)/2**15) < 0.015:
                     num_slices -= 1
                 else:
                     wav_bytes = wav_slice.tobytes()
+                    # print("\n")
+                    # print(len(wav_bytes))
+                    # print("\n")
                     example = tf.train.Example(features=tf.train.Features(feature={"wav_raw": bytes_feature(wav_bytes)}))
                     tfrecords_file.write(example.SerializeToString())    
         else:
@@ -102,6 +121,7 @@ if __name__ == "__main__":
     ###########################################################################
     wav_files = [os.path.join(args.wav_path, wav) for wav in os.listdir(args.wav_path) if wav.endswith(".wav")]
     num_wav_files = len(wav_files)
+    
     random.shuffle(wav_files)
     num_validset_wav_files = int(args.valid_percent*num_wav_files)
     num_trainset_wav_files = num_wav_files-num_validset_wav_files
@@ -133,6 +153,10 @@ if __name__ == "__main__":
     while total_trainset_slices % global_batch_size > 0:
         choose_wav_file = random.choice( trainset_wav_files )
         sr, wav_samples = wavfile.read(choose_wav_file)
+        if sr != 8000: #8000
+            factor = int (sr/8000)
+            wav_samples = sps.decimate(wav_samples,factor)
+            wav_samples = wav_samples.astype(np.int16)
         num_samples = wav_samples.shape[0]
         
         if num_samples >= window_size:
@@ -176,6 +200,10 @@ if __name__ == "__main__":
     while total_validset_slices % global_batch_size > 0:
         choose_wav_file = random.choice(validset_wav_files)
         sr, wav_samples = wavfile.read(choose_wav_file)
+        if sr != 8000: #8000
+            factor = int (sr/8000)
+            wav_samples = sps.decimate(wav_samples,factor)
+            wav_samples = wav_samples.astype(np.int16)
         num_samples = wav_samples.shape[0]
         
         if num_samples >= window_size:  

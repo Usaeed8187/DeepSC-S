@@ -44,9 +44,9 @@ def parse_args():
                         help="output dimension of SE-ResNet in semantic decoder.")
     
     # path of tfrecords files
-    parser.add_argument("--trainset_tfrecords_path", type=str, default="path of your trainset.tfrecords",
+    parser.add_argument("--trainset_tfrecords_path", type=str, default="./tfrecords2/trainset.tfrecords",
                         help="tfrecords path of trainset.")
-    parser.add_argument("--validset_tfrecords_path", type=str, default="path of your validset.tfrecords",
+    parser.add_argument("--validset_tfrecords_path", type=str, default="./tfrecords2/validset.tfrecords",
                         help="tfrecords path of validset.")
     
     # parameter of wireless channel
@@ -67,27 +67,29 @@ print("Called with args:", args)
 frame_length = int(args.sr*args.frame_size)
 stride_length = int(args.sr*args.stride_size)
 
+print("**********frame_length: {}       stride_length: {}**********\n".format(frame_length,stride_length))
+
 if __name__ == "__main__":
     
     ###############    define system model    ###############
     # define semantic encoder
     sem_enc = sem_enc_model(frame_length, stride_length, args)
-    print(sem_enc.summary(line_length=160))
+    # print(sem_enc.summary(line_length=160))
     
     # define channel encoder
     chan_enc = chan_enc_model(frame_length, args)
-    print(chan_enc.summary(line_length=160))
+    # print(chan_enc.summary(line_length=160))
     
     # define channel model
     chan_layer = Chan_Model(name="Channel_Model")
     
     # define channel decoder
     chan_dec = chan_dec_model(frame_length, args)
-    print(chan_dec.summary(line_length=160))
+    # print(chan_dec.summary(line_length=160))
     
     # define semantic decoder
     sem_dec = sem_dec_model(frame_length, stride_length, args)
-    print(sem_dec.summary(line_length=160))
+    # print(sem_dec.summary(line_length=160))
     
     # all trainable weights
     weights_all = sem_enc.trainable_weights + chan_enc.trainable_weights +\
@@ -143,32 +145,47 @@ if __name__ == "__main__":
         return wav_slice
     
     ###################    create folder to save data    ###################
-    common_dir = "path to save the trained data"
+    common_dir = "./"
     saved_model = common_dir + "saved_model/"
     
     # create files to save train loss
     train_loss_dir = common_dir + "train/"   
-    os.makedirs(train_loss_dir)
-    train_loss_file = train_loss_dir + "train_loss.mat"
+    if not os.path.exists( train_loss_dir):
+        os.makedirs(train_loss_dir)
+    train_loss_file = train_loss_dir 
     train_loss_all = []
     
     # create files to save eval loss
     valid_loss_dir = common_dir + "valid/"   
-    os.makedirs(valid_loss_dir)
-    valid_loss_file = valid_loss_dir + "valid_loss.mat"
+    if not os.path.exists( valid_loss_dir):
+        os.makedirs(valid_loss_dir)
+    valid_loss_file = valid_loss_dir
     valid_loss_all = []
     
+    start = time.time()
     print("*****************   start train   *****************")
     snr = pow(10, (args.snr_train_dB / 10))
     std = np.sqrt(1 / (2*snr))
     for epoch in range(args.num_epochs):
         ##########################    train    ##########################
         # read .tfrecords file
+        cur = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        print("*******Epoch: {}, {}*******\n".format(epoch,cur))
         trainset = tf.data.TFRecordDataset(args.trainset_tfrecords_path)
+       
         trainset = trainset.map(map_func=map_function, num_parallel_calls=num_cpus) # num_parallel_calls should be number of cpu cores
+       
         trainset = trainset.shuffle(buffer_size=args.batch_size*657, reshuffle_each_iteration=True)
+        
         trainset = trainset.batch(batch_size=args.batch_size)
+       
         trainset = trainset.prefetch(buffer_size=args.batch_size)
+    
+
+        i=0
+        for step, inputss in enumerate(trainset):
+            i +=1
+        print("*******Total Step: {}********\n".format(i))
         
         # train_loss for each epoch
         train_loss_epoch = []
@@ -178,7 +195,13 @@ if __name__ == "__main__":
         start = time.time()
         
         for step, _input in enumerate(trainset):
+            print("*********{}***********\n".format(_input.shape))
             # train step
+            # if(step%100 == 0):
+            cur = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+            print("Train step: {}, {}".format(step,cur))
+            print(_input)
+            
             loss_value = train_step(_input, std)
             loss_float = float(loss_value)
             train_loss_epoch.append(loss_float)
@@ -230,6 +253,7 @@ if __name__ == "__main__":
         
         ###################    save the train network    ###################
         if (epoch + 1) % 1000 == 0:
+            cur = time.strftime("%Y-%m-%d-%H_%M_%S", time.localtime())
             saved_model_dir = os.path.join(saved_model, "{}_epochs".format(epoch + 1))
             os.makedirs(saved_model_dir)
             
@@ -250,6 +274,8 @@ if __name__ == "__main__":
             sem_dec.save(sem_dec_h5)
             
             ################    save train loss and valid loss    ################
+            train_loss_file = train_loss_file + cur + '_' + "train_loss.mat"
+            valid_loss_file = valid_loss_file + cur + '_' + "valid_loss.mat"
             if os.path.exists(train_loss_file):
                 os.remove(train_loss_file)
             save_train_loss = {}

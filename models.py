@@ -168,7 +168,8 @@ class Chan_Model(object):
         
         # channel h
         h = tf.random.normal(shape=[batch_size, _shape[1], 1, 2], dtype=tf.float32)
-        h = (tf.math.sqrt(1./2.) + tf.math.sqrt(1./2.)*h) / tf.math.sqrt(2.)
+        # h = (tf.math.sqrt(1./2.) + tf.math.sqrt(1./2.)*h) / tf.math.sqrt(2.)
+        h = h / tf.math.sqrt(2.0)
         h_real = h[:, :, :, 0]
         h_imag = h[:, :, :, 1]
         h_complex = tf.dtypes.complex(real=h_real, imag=h_imag)
@@ -180,10 +181,13 @@ class Chan_Model(object):
         n_complex = tf.dtypes.complex(real=n_real, imag=n_imag)
         
         # receive y
-        y_complex = tf.math.multiply(h_complex, x_complex) + n_complex
+        # y_complex = tf.math.multiply(h_complex, x_complex) + n_complex
+        y_complex = 0.5 * x_complex + n_complex
         
         # estimate x_hat with perfect CSI
-        x_hat_complex = tf.math.divide(y_complex, h_complex)
+        
+        # x_hat_complex = tf.math.divide(y_complex, h_complex)
+        x_hat_complex = y_complex
         
         # convert complex to real
         x_hat_real = tf.expand_dims(tf.math.real(x_hat_complex), axis=-1)
