@@ -9,6 +9,7 @@ from __future__ import division
 from __future__ import print_function
 
 import tensorflow as tf
+import numpy as np
 from tensorflow.keras.layers import Conv2D, Conv2DTranspose, GlobalAveragePooling2D, Dense, Concatenate, BatchNormalization
 from speech_processing import enframe, deframe, wav_norm, wav_denorm
 
@@ -173,6 +174,7 @@ class Chan_Model(object):
         h_real = h[:, :, :, 0]
         h_imag = h[:, :, :, 1]
         h_complex = tf.dtypes.complex(real=h_real, imag=h_imag)
+        print(np.shape(h_complex))
         
         # noise n
         n = tf.random.normal(shape=tf.shape(x), mean=0.0, stddev=std, dtype=tf.float32)
