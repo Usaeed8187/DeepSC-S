@@ -13,6 +13,9 @@ import numpy as np
 from tensorflow.keras.layers import Conv2D, Conv2DTranspose, GlobalAveragePooling2D, Dense, Concatenate, BatchNormalization
 from speech_processing import enframe, deframe, wav_norm, wav_denorm
 
+from tensorflow.python.ops.numpy_ops import np_config
+from channel_generator_eva import channel_generator_fractional
+
 def conv_bn_layer(inputs, filters, strides, name):
     
     conv = Conv2D(filters=filters, kernel_size=(5, 5), strides=strides,
@@ -152,6 +155,8 @@ class Chan_Model(object):
         self.name = name
             
     def __call__(self, _input, std):
+
+        # np_config.enable_numpy_behavior()
         
         _input = tf.transpose(_input, perm=[0, 3, 1, 2])
         
@@ -175,6 +180,28 @@ class Chan_Model(object):
         h_imag = h[:, :, :, 1]
         h_complex = tf.dtypes.complex(real=h_real, imag=h_imag)
         print(np.shape(h_complex))
+
+        sess = tf.compat.v1.Session()
+
+        shape_value = sess.run(tf.shape(_input)[0])
+        N_c = np.array(shape_value)
+
+        shape_list = _input.get_shape().as_list()
+        N_slot = np.array(shape_list)
+
+        params = \
+        {
+            'N_c': N_c, # number of subcarriers
+            'N_slot': N_slot[1], # number of time slot per sub_frame
+            'mobility_speed': 150, # in km/h
+            'car_fre': 4 * 10**9, # carrier frequency
+            'delta_f': 15.0 * 10 ** 3, # subcarrier spacing
+        }
+        channel_obj = channel_generator_fractional(params)
+        chan_coef, delay_taps, doppler_taps, taps = channel_obj.generate_delay_doppler_channel_param()
+        gs = channel_obj.gen_discrete_time_channel(chan_coef, delay_taps, doppler_taps, taps)
+        curr_signal_1d = tf.reshape(x_complex, [-1])
+        curr_output = channel_obj.otfs_channel_output(delay_taps, gs, curr_signal_1d)
         
         # noise n
         n = tf.random.normal(shape=tf.shape(x), mean=0.0, stddev=std, dtype=tf.float32)

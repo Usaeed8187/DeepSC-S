@@ -1,9 +1,17 @@
 import numpy as np
+import tensorflow as tf
+
+from tensorflow.python.ops.numpy_ops import np_config
 
 class channel_generator_fractional:
+    # np_config.enable_numpy_behavior()
     def __init__(self, OTFS_para):
-        self.N_r = OTFS_para['N_r']
-        self.N_t = OTFS_para['N_t']
+
+        # sess = tf.compat.v1.Session()
+        # OTFS_para_value = sess.run(OTFS_para)
+
+        self.N_r = 1
+        self.N_t = 1
         self.M = OTFS_para['N_c']
         self.N = OTFS_para['N_slot']
         self.car_fre = OTFS_para['car_fre']
@@ -47,7 +55,17 @@ class channel_generator_fractional:
     def otfs_channel_output(self, delay_taps, gs, s):
 
         l_max = max(delay_taps)
-        r = np.zeros([self.N * self.M + l_max], dtype=complex)
+
+        # r = np.zeros([self.N * self.M + l_max], dtype=complex)
+        
+        # r = tf.dtypes.complex(real=r_real, imag=r_imag)
+        # r_real = tf.zeros([self.N * self.M + l_max, 1])
+        # r_imag = tf.zeros([self.N * self.M + l_max, 1])
+
+        tensor_shape = [self.N * self.M + l_max, 1]
+        r = tf.Variable(tf.zeros(shape=tensor_shape, dtype=tf.complex64))
+        r = tf.assign(r[:10], tf.ones(shape=[10, 1], dtype=tf.complex64))
+
         for l in range(self.N * self.M):
             r[l:(l + l_max + 1)] += s[l] * gs[:, l]
         r[:l_max] += r[-l_max:]

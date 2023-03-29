@@ -15,6 +15,8 @@ import numpy as np
 import scipy.io as sio
 from models import sem_enc_model, chan_enc_model, Chan_Model, chan_dec_model, sem_dec_model
 
+tf.compat.v1.enable_eager_execution()
+
 num_cpus = os.cpu_count()
 print("Number of CPU cores is", num_cpus)
 
