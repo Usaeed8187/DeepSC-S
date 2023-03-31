@@ -56,7 +56,7 @@ class channel_generator_fractional:
 
         l_max = max(delay_taps)
 
-        r = np.zeros([self.N * self.M + l_max], dtype=complex)
+        # r = np.zeros([self.N * self.M + l_max], dtype=complex)
         
         # r = tf.dtypes.complex(real=r_real, imag=r_imag)
         # r_real = tf.zeros([self.N * self.M + l_max, 1])
@@ -64,10 +64,28 @@ class channel_generator_fractional:
 
         # tensor_shape = [self.N * self.M + l_max, 1]
         # r = tf.Variable(tf.zeros(shape=tensor_shape, dtype=tf.complex64))
-        # r = tf.assign(r[:10], tf.ones(shape=[10, 1], dtype=tf.complex64))
 
-        for l in range(self.N * self.M):
-            r[l:(l + l_max + 1)] += s[l] * gs[:, l]
-        r[:l_max] += r[-l_max:]
-        r = r[:-l_max] # Remove cyclic prefix
+        # gs_tensor = tf.constant(gs, dtype=tf.complex64)
+
+        # for l in range(self.N * self.M):
+        #     indices = [i for i in range(l, (l + l_max + 2))]
+        #     values = s[l] * gs_tensor[:, l]
+        #     for idx, val in zip(indices, values):
+        #         r = tf.tensor_scatter_nd_update(r, [idx], [val])
+        #     # r[l:(l + l_max + 1)] += s[l] * gs_tensor[:, l]
+        # r[:l_max] += r[-l_max:]
+        # r = r[:-l_max]
+
+        G = np.zeros((self.M*self.N+ l_max, self.M*self.N), dtype=np.complex64)
+
+        for i in range(self.N * self.M):
+            G[i:l_max+1+i,i] = gs[:,i] 
+        
+        G[:l_max,:] += G[-l_max:,:] #effect of multipath on the first l_max symbols. matches line 74. NOTE: not 100% sure if line 74 was correct
+        G = G[:-l_max,:]
+
+        G_tensor = tf.constant(G)
+        s_reshaped = tf.reshape(s, [512, 1])
+        r = tf.matmul(G_tensor, s_reshaped)
+
         return r

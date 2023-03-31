@@ -181,20 +181,13 @@ class Chan_Model(object):
         h_complex = tf.dtypes.complex(real=h_real, imag=h_imag)
         print(np.shape(h_complex))
 
-        # sess = tf.compat.v1.Session()
-        # sess
-        shape_value = _input.shape[0]
-        # sess.run(tf.shape(_input)[0])
-        N_c = np.array(shape_value)
-        print(N_c, shape_value)
-
-        shape_list = _input.get_shape().as_list()
-        N_slot = np.array(shape_list)
+        N_c = x_complex.shape[2]
+        N_slot = 1
 
         params = \
         {
             'N_c': N_c, # number of subcarriers
-            'N_slot': N_slot[1], # number of time slot per sub_frame
+            'N_slot': N_slot, # number of time slot per sub_frame
             'mobility_speed': 150, # in km/h
             'car_fre': 4 * 10**9, # carrier frequency
             'delta_f': 15.0 * 10 ** 3, # subcarrier spacing
@@ -203,15 +196,24 @@ class Chan_Model(object):
         chan_coef, delay_taps, doppler_taps, taps = channel_obj.generate_delay_doppler_channel_param()
         gs = channel_obj.gen_discrete_time_channel(chan_coef, delay_taps, doppler_taps, taps)
 
-        print(x_complex)
-        # with tf.compat.v1.Session() as sess:
-        #     tensor_evaluated = sess.run(x_complex)
-        # curr_signal_1d = np.array(tensor_evaluated)
-        curr_signal_1d = tf.reshape(x_complex, [-1])
-        print(curr_signal_1d)
-        # curr_signal_1d = tf.reshape(x_complex, [-1])
+        curr_output = tf.Variable(tf.zeros_like(x_complex))
 
-        curr_output = channel_obj.otfs_channel_output(delay_taps, gs, curr_signal_1d)
+        for batch_ind in range(x_complex.shape[0]):
+            for ofdm_sym_ind in range(x_complex.shape[1]):
+
+                curr_input = x_complex[batch_ind,ofdm_sym_ind,:]
+                curr_input = tf.reshape(curr_input, [-1])
+
+                batch_ind_tensor = tf.fill(tf.shape(curr_input), batch_ind)
+                ofdm_sym_ind_tensor = tf.fill(tf.shape(curr_input), ofdm_sym_ind)
+                data_ind_tensor = tf.range(N_c)
+                indices = tf.stack([batch_ind_tensor, ofdm_sym_ind_tensor, data_ind_tensor], axis=1)
+
+                new_values = tf.squeeze(channel_obj.otfs_channel_output(delay_taps, gs, curr_input))
+
+                curr_output = tf.tensor_scatter_nd_update(curr_output, indices, new_values)
+                
+                
         
         # noise n
         n = tf.random.normal(shape=tf.shape(x), mean=0.0, stddev=std, dtype=tf.float32)
