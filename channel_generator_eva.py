@@ -56,15 +56,15 @@ class channel_generator_fractional:
 
         l_max = max(delay_taps)
 
-        # r = np.zeros([self.N * self.M + l_max], dtype=complex)
+        r = np.zeros([self.N * self.M + l_max], dtype=complex)
         
         # r = tf.dtypes.complex(real=r_real, imag=r_imag)
         # r_real = tf.zeros([self.N * self.M + l_max, 1])
         # r_imag = tf.zeros([self.N * self.M + l_max, 1])
 
-        tensor_shape = [self.N * self.M + l_max, 1]
-        r = tf.Variable(tf.zeros(shape=tensor_shape, dtype=tf.complex64))
-        r = tf.assign(r[:10], tf.ones(shape=[10, 1], dtype=tf.complex64))
+        # tensor_shape = [self.N * self.M + l_max, 1]
+        # r = tf.Variable(tf.zeros(shape=tensor_shape, dtype=tf.complex64))
+        # r = tf.assign(r[:10], tf.ones(shape=[10, 1], dtype=tf.complex64))
 
         for l in range(self.N * self.M):
             r[l:(l + l_max + 1)] += s[l] * gs[:, l]

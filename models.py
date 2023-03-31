@@ -181,10 +181,12 @@ class Chan_Model(object):
         h_complex = tf.dtypes.complex(real=h_real, imag=h_imag)
         print(np.shape(h_complex))
 
-        sess = tf.compat.v1.Session()
-
-        shape_value = sess.run(tf.shape(_input)[0])
+        # sess = tf.compat.v1.Session()
+        # sess
+        shape_value = _input.shape[0]
+        # sess.run(tf.shape(_input)[0])
         N_c = np.array(shape_value)
+        print(N_c, shape_value)
 
         shape_list = _input.get_shape().as_list()
         N_slot = np.array(shape_list)
@@ -200,7 +202,15 @@ class Chan_Model(object):
         channel_obj = channel_generator_fractional(params)
         chan_coef, delay_taps, doppler_taps, taps = channel_obj.generate_delay_doppler_channel_param()
         gs = channel_obj.gen_discrete_time_channel(chan_coef, delay_taps, doppler_taps, taps)
+
+        print(x_complex)
+        # with tf.compat.v1.Session() as sess:
+        #     tensor_evaluated = sess.run(x_complex)
+        # curr_signal_1d = np.array(tensor_evaluated)
         curr_signal_1d = tf.reshape(x_complex, [-1])
+        print(curr_signal_1d)
+        # curr_signal_1d = tf.reshape(x_complex, [-1])
+
         curr_output = channel_obj.otfs_channel_output(delay_taps, gs, curr_signal_1d)
         
         # noise n

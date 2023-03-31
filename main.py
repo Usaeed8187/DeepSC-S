@@ -111,6 +111,8 @@ if __name__ == "__main__":
         with tf.GradientTape() as tape:
             _output, batch_mean, batch_var = sem_enc(_input)
             _output = chan_enc(_output)
+            print("input", _input)
+            print("output", _output)
             _output = chan_layer(_output, std)
             _output = chan_dec(_output)
             _output = sem_dec([_output, batch_mean, batch_var])
