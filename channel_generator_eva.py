@@ -85,7 +85,8 @@ class channel_generator_fractional:
         G = G[:-l_max,:]
 
         G_tensor = tf.constant(G)
-        s_reshaped = tf.reshape(s, [512, 1])
+        s_reshaped = tf.reshape(s, [self.M, 1])
+        s_reshaped = tf.cast(s_reshaped, G_tensor.dtype)
         r = tf.matmul(G_tensor, s_reshaped)
 
         return r

@@ -12,6 +12,7 @@ import tensorflow as tf
 import numpy as np
 from tensorflow.keras.layers import Conv2D, Conv2DTranspose, GlobalAveragePooling2D, Dense, Concatenate, BatchNormalization
 from speech_processing import enframe, deframe, wav_norm, wav_denorm
+from OFDM_try import FromOFDM, ToOFDM
 
 from tensorflow.python.ops.numpy_ops import np_config
 from channel_generator_eva import channel_generator_fractional
@@ -155,8 +156,6 @@ class Chan_Model(object):
         self.name = name
             
     def __call__(self, _input, std):
-
-        # np_config.enable_numpy_behavior()
         
         _input = tf.transpose(_input, perm=[0, 3, 1, 2])
         
@@ -164,73 +163,128 @@ class Chan_Model(object):
         _shape = _input.get_shape().as_list()
         assert (_shape[2]*_shape[3]) % 2 == 0, "number of transmitted symbols must be an integer."
         
+        
         # reshape layer and normalize the average power of each dim in x into 0.5
-        x = tf.reshape(_input, [batch_size, _shape[1], _shape[2]*_shape[3]//2, 2])
+        x = tf.reshape(_input, [batch_size, _shape[1], _shape[2]*_shape[3]//2, 2]) # why the last dimension is 2
+        
+
         x_norm = tf.math.sqrt(_shape[2]*_shape[3]//2 / 2.0) * tf.math.l2_normalize(x, axis=2)
         
         x_real = x_norm[:, :, :, 0]
         x_imag = x_norm[:, :, :, 1]
         x_complex = tf.dtypes.complex(real=x_real, imag=x_imag)
-        
-        # channel h
-        h = tf.random.normal(shape=[batch_size, _shape[1], 1, 2], dtype=tf.float32)
-        # h = (tf.math.sqrt(1./2.) + tf.math.sqrt(1./2.)*h) / tf.math.sqrt(2.)
-        h = h / tf.math.sqrt(2.0)
-        h_real = h[:, :, :, 0]
-        h_imag = h[:, :, :, 1]
-        h_complex = tf.dtypes.complex(real=h_real, imag=h_imag)
-        print(np.shape(h_complex))
 
-        N_c = x_complex.shape[2]
-        N_slot = 1
+        # JYD Modification
+        x_t, shape_s = ToOFDM(x_complex)
+        _shape  = x_t.get_shape().as_list()
+        shape_n = _shape.copy()
+        shape_n.append(2)
+        shape_s.append(2)
+
+
+        # channel h
+        # h = tf.random.normal(shape=[batch_size, _shape[1], 1, 2], dtype=tf.float32)
+        h = tf.random.normal(shape=shape_n, dtype=tf.float32)
+        h = (tf.math.sqrt(1./2.) + tf.math.sqrt(1./2.)*h) / tf.math.sqrt(2.)
+        # h = h / tf.math.sqrt(2.0)
+        h_real = h[..., 0]
+        h_imag = h[..., 1]
+        h_complex = tf.dtypes.complex(real=h_real, imag=h_imag)
+        # h_complex = tf.reshape(h_complex, [shape_s[0], shape_s[1], -1])
+
+        h_complex = tf.cast(h_complex, tf.complex128)
+
+        # US Modification
+        N_c = 576
+        num_ofdm_syms = 20
 
         params = \
         {
             'N_c': N_c, # number of subcarriers
-            'N_slot': N_slot, # number of time slot per sub_frame
+            'N_slot': 1, # number of ofdm symbols
             'mobility_speed': 150, # in km/h
             'car_fre': 4 * 10**9, # carrier frequency
             'delta_f': 15.0 * 10 ** 3, # subcarrier spacing
         }
+
         channel_obj = channel_generator_fractional(params)
         chan_coef, delay_taps, doppler_taps, taps = channel_obj.generate_delay_doppler_channel_param()
         gs = channel_obj.gen_discrete_time_channel(chan_coef, delay_taps, doppler_taps, taps)
 
-        curr_output = tf.Variable(tf.zeros_like(x_complex))
+        curr_output = tf.Variable(tf.zeros_like(x_t))
 
-        for batch_ind in range(x_complex.shape[0]):
-            for ofdm_sym_ind in range(x_complex.shape[1]):
+        for batch_ind in range(x_t.shape[0]):
+            print(batch_ind)
+            for subframe_ind in range(8):
+                for ofdm_sym_ind in range(num_ofdm_syms):
 
-                curr_input = x_complex[batch_ind,ofdm_sym_ind,:]
-                curr_input = tf.reshape(curr_input, [-1])
+                    curr_input = x_t[batch_ind,subframe_ind,(ofdm_sym_ind*N_c):((ofdm_sym_ind+1)*N_c)]
+                    curr_input = tf.reshape(curr_input, [-1])
 
-                batch_ind_tensor = tf.fill(tf.shape(curr_input), batch_ind)
-                ofdm_sym_ind_tensor = tf.fill(tf.shape(curr_input), ofdm_sym_ind)
-                data_ind_tensor = tf.range(N_c)
-                indices = tf.stack([batch_ind_tensor, ofdm_sym_ind_tensor, data_ind_tensor], axis=1)
+                    new_values = tf.squeeze(channel_obj.otfs_channel_output(delay_taps, gs, curr_input))
 
-                new_values = tf.squeeze(channel_obj.otfs_channel_output(delay_taps, gs, curr_input))
+                    batch_ind_tensor = tf.fill(tf.shape(curr_input), batch_ind)
+                    subframe_ind_tensor = tf.fill(tf.shape(curr_input), subframe_ind)
+                    ofdm_sym_start = ofdm_sym_ind * N_c
+                    ofdm_sym_end = (ofdm_sym_ind + 1) * N_c
+                    data_ind_tensor = tf.range(ofdm_sym_start, ofdm_sym_end)
+                    indices = tf.stack([batch_ind_tensor, subframe_ind_tensor, data_ind_tensor], axis=1)
 
-                curr_output = tf.tensor_scatter_nd_update(curr_output, indices, new_values)
-                
-                
+                    new_values = tf.cast(new_values, curr_output.dtype)
+                    curr_output = tf.tensor_scatter_nd_update(curr_output, indices, new_values)
+        
+        # y_complex = tf.math.multiply(h_complex, x_t)
+        y_complex = curr_output
+
+        db = std
+        squ = tf.square(tf.abs(y_complex))
+        sig_power = tf.math.reduce_mean(squ, axis=[2,1])
+        std2 = sig_power * 10**(-db/10) 
+        std2 = tf.tile(std2[:,tf.newaxis,tf.newaxis],
+                        multiples=[1, shape_n[-3], shape_n[-2]])
+        std2 = tf.sqrt(std2/2)
+        std2 = tf.cast(std2, tf.complex128)
+
+        # JYD Modification End
         
         # noise n
-        n = tf.random.normal(shape=tf.shape(x), mean=0.0, stddev=std, dtype=tf.float32)
-        n_real = n[:, :, :, 0]
-        n_imag = n[:, :, :, 1]
+        # n = tf.random.normal(shape=tf.shape(x), mean=0.0, stddev=std, dtype=tf.float32)
+
+        # JYD Modification
+        # n = tf.random.normal(shape=shape_n, mean=0.0, stddev=std, dtype=tf.float32)
+        n = tf.random.normal(shape=shape_n, mean=0.0, dtype=tf.float32)
+        
+
+        n_real = n[..., 0]
+        n_imag = n[..., 1]
         n_complex = tf.dtypes.complex(real=n_real, imag=n_imag)
+        n_complex = tf.cast(n_complex, tf.complex128)
+        n_complex = tf.math.multiply(n_complex, std2)
+        # n_complex = tf.reshape(n_complex, [shape_s[0], shape_s[1], -1])
         
+        # # JYD Modification End
+
         # receive y
+
         # y_complex = tf.math.multiply(h_complex, x_complex) + n_complex
-        y_complex = 0.5 * x_complex + n_complex
+        # y_complex = 0.5 * x_complex + n_complex
         
+        # JYD Modification
+    
+        y_complex = y_complex + n_complex
+        # JYD Modification End
+
         # estimate x_hat with perfect CSI
+        x_hat_complex = tf.math.divide(y_complex, h_complex)
         
-        # x_hat_complex = tf.math.divide(y_complex, h_complex)
-        x_hat_complex = y_complex
-        
+
         # convert complex to real
+
+        # JYD Modification
+        x_hat_complex, _ = FromOFDM(x_hat_complex)
+        x_hat_complex = tf.cast(x_hat_complex, tf.complex64)
+        # JYD Modification End
+
         x_hat_real = tf.expand_dims(tf.math.real(x_hat_complex), axis=-1)
         x_hat_imag = tf.expand_dims(tf.math.imag(x_hat_complex), axis=-1)
         x_hat = tf.concat([x_hat_real, x_hat_imag], -1)

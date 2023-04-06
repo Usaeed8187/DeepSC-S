@@ -15,8 +15,6 @@ import numpy as np
 import scipy.io as sio
 from models import sem_enc_model, chan_enc_model, Chan_Model, chan_dec_model, sem_dec_model
 
-tf.compat.v1.enable_eager_execution()
-
 num_cpus = os.cpu_count()
 print("Number of CPU cores is", num_cpus)
 
@@ -111,8 +109,6 @@ if __name__ == "__main__":
         with tf.GradientTape() as tape:
             _output, batch_mean, batch_var = sem_enc(_input)
             _output = chan_enc(_output)
-            print("input", _input)
-            print("output", _output)
             _output = chan_layer(_output, std)
             _output = chan_dec(_output)
             _output = sem_dec([_output, batch_mean, batch_var])

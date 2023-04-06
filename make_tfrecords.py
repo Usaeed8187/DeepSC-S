@@ -33,9 +33,9 @@ def parse_args():
     parser.add_argument("--frame_size", type=float, default=0.016, help="time duration of each frame")
     parser.add_argument("--stride_size", type=float, default=0.016, help="time duration of frame stride") 
     
-    parser.add_argument("--wav_path", type=str, default="path of your original .wav files",
+    parser.add_argument("--wav_path", type=str, default="tf_test",
                         help="path of wavset")
-    parser.add_argument("--save_path", type=str, default="path to save .tfrecords files",
+    parser.add_argument("--save_path", type=str, default="tfrecords2",
                         help="path to save .tfrecords file")
     parser.add_argument("--valid_percent", type=float, default=0.05, help="percent of validset in total dataset")
     parser.add_argument("--trainset_filename", type=str, default="trainset.tfrecords", help=".tfrecords filename of trainset")

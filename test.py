@@ -49,9 +49,9 @@ def parse_args():
                         help="output dimension of SE-ResNet in semantic decoder.")
     
     # path of tfrecords files
-    parser.add_argument("--trainset_tfrecords_path", type=str, default="./tfrecords2/trainset.tfrecords",
+    parser.add_argument("--trainset_tfrecords_path", type=str, default="./tfrecords/trainset.tfrecords",
                         help="tfrecords path of trainset.")
-    parser.add_argument("--validset_tfrecords_path", type=str, default="./tfrecords2/validset.tfrecords",
+    parser.add_argument("--validset_tfrecords_path", type=str, default="./tfrecords/validset.tfrecords",
                         help="tfrecords path of validset.")
     parser.add_argument("--saved", type=str, default="./saved_model/1000_epochs_2023-03-13-08_43_52",
                         help="path of the saved models aftering training.")
@@ -153,9 +153,15 @@ if __name__ == "__main__":
         for step, _input in enumerate(trainset):
             i += 1
         
+            # print("*************Input Shape: {}***************\n".format(tf.shape(_input)))
+
             _output, batch_mean, batch_var = sem_enc(_input)
+
+            # print("*************Sem Shape: {}***************\n".format(tf.shape(_output)))
+
             _output = chan_enc(_output)
-            _output = chan_layer(_output, std)
+            # print("*************Shape: {}***************\n".format(tf.shape(_output)))
+            _output = chan_layer(_output, db)
             _output = chan_dec(_output)
             _output = sem_dec([_output, batch_mean, batch_var])
 
@@ -165,7 +171,7 @@ if __name__ == "__main__":
             for i in range(_input2.shape[0]):
                 s1 = pesq(rate,_input2[i,:],_test2[i,:],'nb')
                 s += s1 / _input2.shape[0]
-                break
+                
                 
                 #print('*************PESQ Score: {}*************\n'.format(score))
         
