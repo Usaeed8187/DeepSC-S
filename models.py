@@ -14,7 +14,6 @@ from tensorflow.keras.layers import Conv2D, Conv2DTranspose, GlobalAveragePoolin
 from speech_processing import enframe, deframe, wav_norm, wav_denorm
 from OFDM_try import FromOFDM, ToOFDM
 
-from tensorflow.python.ops.numpy_ops import np_config
 from channel_generator_eva import channel_generator_fractional
 
 def conv_bn_layer(inputs, filters, strides, name):
@@ -154,8 +153,11 @@ class Chan_Model(object):
     def __init__(self, name):
         
         self.name = name
+
+    # def resize_variable(var, new_shape):
+    #     var.assign(tf.zeros(new_shape))  # Assign a new value with the new shape
             
-    def __call__(self, _input, std):
+    def __call__(self, _input, curr_output, std):
         
         _input = tf.transpose(_input, perm=[0, 3, 1, 2])
         
@@ -181,6 +183,24 @@ class Chan_Model(object):
         shape_n.append(2)
         shape_s.append(2)
 
+        # try:
+        #     curr_output = tf.compat.v1.get_default_graph().get_tensor_by_name("curr_output:0")
+        #     print("Tensor is already defined")
+        # except KeyError:
+        #     # Define the tensor
+        #     curr_output = tf.Variable(tf.zeros_like(x_t), name="curr_output")
+        #     print("Tensor is not defined. Defining it now...")
+
+        # if "curr_output" in locals() or "curr_output" in globals():
+        #         curr_output = tf.get_default_graph().get_tensor_by_name("curr_output:0")
+        #         print("Tensor is already defined")
+        # else:
+        #         # Define the tensor
+        #         curr_output = tf.Variable(tf.zeros_like(x_t), name="curr_output")
+        #         print("Tensor is not defined. Defining it now...")
+
+        # if not hasattr(__call__, "curr_output"):
+        #     __call__.curr_output = tf.Variable(tf.zeros_like(x_t), name="curr_output")
 
         # channel h
         # h = tf.random.normal(shape=[batch_size, _shape[1], 1, 2], dtype=tf.float32)
@@ -211,9 +231,8 @@ class Chan_Model(object):
         chan_coef, delay_taps, doppler_taps, taps = channel_obj.generate_delay_doppler_channel_param()
         gs = channel_obj.gen_discrete_time_channel(chan_coef, delay_taps, doppler_taps, taps)
 
-        curr_output = tf.Variable(tf.zeros_like(x_t))
-
         for batch_ind in range(x_t.shape[0]):
+        # for batch_ind in range(1):
             print(batch_ind)
             for subframe_ind in range(8):
                 for ofdm_sym_ind in range(num_ofdm_syms):
@@ -233,11 +252,14 @@ class Chan_Model(object):
                     new_values = tf.cast(new_values, curr_output.dtype)
                     curr_output = tf.tensor_scatter_nd_update(curr_output, indices, new_values)
         
-        # y_complex = tf.math.multiply(h_complex, x_t)
-        y_complex = curr_output
+        
+        # y_complex = curr_output
+
+        y_complex = tf.math.multiply(h_complex, x_t)
 
         db = std
         squ = tf.square(tf.abs(y_complex))
+        squ = tf.cast(squ, tf.float32)
         sig_power = tf.math.reduce_mean(squ, axis=[2,1])
         std2 = sig_power * 10**(-db/10) 
         std2 = tf.tile(std2[:,tf.newaxis,tf.newaxis],

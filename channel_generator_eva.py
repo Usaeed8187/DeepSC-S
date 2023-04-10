@@ -1,8 +1,6 @@
 import numpy as np
 import tensorflow as tf
 
-from tensorflow.python.ops.numpy_ops import np_config
-
 class channel_generator_fractional:
     # np_config.enable_numpy_behavior()
     def __init__(self, OTFS_para):
