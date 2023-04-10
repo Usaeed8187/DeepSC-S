@@ -231,7 +231,10 @@ class Chan_Model(object):
         chan_coef, delay_taps, doppler_taps, taps = channel_obj.generate_delay_doppler_channel_param()
         gs = channel_obj.gen_discrete_time_channel(chan_coef, delay_taps, doppler_taps, taps)
 
-        for batch_ind in range(x_t.shape[0]):
+        batches = x_t.shape[0]
+        # batches = 1
+
+        for batch_ind in range(batches-1):
         # for batch_ind in range(1):
             print(batch_ind)
             for subframe_ind in range(8):
@@ -251,9 +254,16 @@ class Chan_Model(object):
 
                     new_values = tf.cast(new_values, curr_output.dtype)
                     curr_output = tf.tensor_scatter_nd_update(curr_output, indices, new_values)
-        
-        
+
         # y_complex = curr_output
+
+        del new_values
+        del curr_input
+        del curr_output
+        del batch_ind_tensor
+        del subframe_ind_tensor
+        del data_ind_tensor
+        del indices
 
         y_complex = tf.math.multiply(h_complex, x_t)
 
