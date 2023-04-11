@@ -15,12 +15,13 @@ import numpy as np
 import scipy.io as sio
 from models import sem_enc_model, chan_enc_model, Chan_Model, chan_dec_model, sem_dec_model
 
-tf.compat.v1.enable_eager_execution()
-
 num_cpus = os.cpu_count()
 print("Number of CPU cores is", num_cpus)
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["TF_MIN_GPU_MULTIPROCESSOR_COUNT"]="2"
+os.environ["CUDA_VISIBLE_DEVICES"]="0,1"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
 gpus = tf.config.experimental.list_physical_devices(device_type="GPU")
 for gpu in gpus:
     tf.config.experimental.set_memory_growth(gpu, True) # assign GPU memory dynamically
@@ -105,15 +106,14 @@ if __name__ == "__main__":
     
     ###############    define train step and valid step    ###############
     @tf.function
-    def train_step(_input, std):
+    def train_step(_input, curr_output, std):
         
         std = tf.cast(std, dtype=tf.float32)
         with tf.GradientTape() as tape:
             _output, batch_mean, batch_var = sem_enc(_input)
             _output = chan_enc(_output)
-            print("input", _input)
-            print("output", _output)
-            _output = chan_layer(_output, std)
+
+            _output = chan_layer(_output, curr_output, std)
             _output = chan_dec(_output)
             _output = sem_dec([_output, batch_mean, batch_var])
             loss_value = mse_loss(_input, _output)
@@ -206,10 +206,15 @@ if __name__ == "__main__":
             print("Train step: {}, {}".format(step,cur))
             print(_input)
             
-            loss_value = train_step(_input, std)
+            with tf.device('/gpu:1'):
+                curr_output = tf.Variable(tf.zeros([32, 128, 512], dtype=tf.complex64))
+                loss_value = train_step(_input, curr_output, std)
+
+            # print("loss value calculated")
             loss_float = float(loss_value)
             train_loss_epoch.append(loss_float)
-            
+            # print("train loss done")
+
             # Calculate the accumulated train loss value
             train_loss += loss_float
             
@@ -256,7 +261,7 @@ if __name__ == "__main__":
         print()
         
         ###################    save the train network    ###################
-        if (epoch + 1) % 1000 == 0:
+        if (epoch + 1) % 100 == 0:
             cur = time.strftime("%Y-%m-%d-%H_%M_%S", time.localtime())
             saved_model_dir = os.path.join(saved_model, "{}_epochs".format(epoch + 1))
             os.makedirs(saved_model_dir)

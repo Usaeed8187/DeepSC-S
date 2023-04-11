@@ -13,7 +13,6 @@ import numpy as np
 from tensorflow.keras.layers import Conv2D, Conv2DTranspose, GlobalAveragePooling2D, Dense, Concatenate, BatchNormalization
 from speech_processing import enframe, deframe, wav_norm, wav_denorm
 
-from tensorflow.python.ops.numpy_ops import np_config
 from channel_generator_eva import channel_generator_fractional
 
 def conv_bn_layer(inputs, filters, strides, name):
@@ -154,9 +153,7 @@ class Chan_Model(object):
         
         self.name = name
             
-    def __call__(self, _input, std):
-
-        # np_config.enable_numpy_behavior()
+    def __call__(self, _input, curr_output, std):
         
         _input = tf.transpose(_input, perm=[0, 3, 1, 2])
         
@@ -164,8 +161,11 @@ class Chan_Model(object):
         _shape = _input.get_shape().as_list()
         assert (_shape[2]*_shape[3]) % 2 == 0, "number of transmitted symbols must be an integer."
         
+        
         # reshape layer and normalize the average power of each dim in x into 0.5
-        x = tf.reshape(_input, [batch_size, _shape[1], _shape[2]*_shape[3]//2, 2])
+        x = tf.reshape(_input, [batch_size, _shape[1], _shape[2]*_shape[3]//2, 2]) # why the last dimension is 2
+        
+
         x_norm = tf.math.sqrt(_shape[2]*_shape[3]//2 / 2.0) * tf.math.l2_normalize(x, axis=2)
         
         x_real = x_norm[:, :, :, 0]
@@ -181,39 +181,40 @@ class Chan_Model(object):
         h_complex = tf.dtypes.complex(real=h_real, imag=h_imag)
         print(np.shape(h_complex))
 
-        N_c = x_complex.shape[2]
-        N_slot = 1
-
+        # US Modification
+        
+        input_to_chan = x_complex                                       # NOTE: CONFIGURE THIS
+        batches = input_to_chan.shape[0]
+        N_c = 512                                                       # NOTE: CONFIGURE THIS
+        partition_sz_1 = 1                                              # NOTE: CONFIGURE THIS
+        partition_sz_2 = 128                                            # NOTE: CONFIGURE THIS
+        num_ofdm_syms = batches * partition_sz_1 * partition_sz_2     # NOTE: CONFIGURE THIS
+        
+        
+        
         params = \
         {
             'N_c': N_c, # number of subcarriers
-            'N_slot': N_slot, # number of time slot per sub_frame
+            'N_slot': num_ofdm_syms, # number of ofdm symbols
             'mobility_speed': 150, # in km/h
             'car_fre': 4 * 10**9, # carrier frequency
             'delta_f': 15.0 * 10 ** 3, # subcarrier spacing
         }
+
         channel_obj = channel_generator_fractional(params)
         chan_coef, delay_taps, doppler_taps, taps = channel_obj.generate_delay_doppler_channel_param()
         gs = channel_obj.gen_discrete_time_channel(chan_coef, delay_taps, doppler_taps, taps)
 
-        curr_output = tf.Variable(tf.zeros_like(x_complex))
+        new_shape = [num_ofdm_syms, N_c]
+        input_to_chan = tf.reshape(input_to_chan, new_shape)
 
-        for batch_ind in range(x_complex.shape[0]):
-            for ofdm_sym_ind in range(x_complex.shape[1]):
+        channel_output = tf.squeeze(channel_obj.otfs_channel_output(delay_taps, gs, tf.reshape(input_to_chan, [-1])))
+        
+        # y_complex = tf.math.multiply(h_complex, x_complex)
+        y_complex = tf.reshape(channel_output, x_complex.shape)
+        y_complex = tf.cast(y_complex, input_to_chan.dtype)
 
-                curr_input = x_complex[batch_ind,ofdm_sym_ind,:]
-                curr_input = tf.reshape(curr_input, [-1])
-
-                batch_ind_tensor = tf.fill(tf.shape(curr_input), batch_ind)
-                ofdm_sym_ind_tensor = tf.fill(tf.shape(curr_input), ofdm_sym_ind)
-                data_ind_tensor = tf.range(N_c)
-                indices = tf.stack([batch_ind_tensor, ofdm_sym_ind_tensor, data_ind_tensor], axis=1)
-
-                new_values = tf.squeeze(channel_obj.otfs_channel_output(delay_taps, gs, curr_input))
-
-                curr_output = tf.tensor_scatter_nd_update(curr_output, indices, new_values)
-                
-                
+        # US Modification end
         
         # noise n
         n = tf.random.normal(shape=tf.shape(x), mean=0.0, stddev=std, dtype=tf.float32)
@@ -226,7 +227,6 @@ class Chan_Model(object):
         y_complex = 0.5 * x_complex + n_complex
         
         # estimate x_hat with perfect CSI
-        
         # x_hat_complex = tf.math.divide(y_complex, h_complex)
         x_hat_complex = y_complex
         
