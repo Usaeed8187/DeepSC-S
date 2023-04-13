@@ -54,60 +54,21 @@ class channel_generator_fractional:
 
         l_max = max(delay_taps)
 
-        # r = np.zeros([self.N * self.M + l_max], dtype=complex)
-        
-        # r = tf.dtypes.complex(real=r_real, imag=r_imag)
-        # r_real = tf.zeros([self.N * self.M + l_max, 1])
-        # r_imag = tf.zeros([self.N * self.M + l_max, 1])
-
-        # tensor_shape = [self.N * self.M + l_max, 1]
-        # r = tf.Variable(tf.zeros(shape=tensor_shape, dtype=tf.complex64))
-
-        # gs_tensor = tf.constant(gs, dtype=tf.complex64)
-
-        # for l in range(self.N * self.M):
-        #     indices = [i for i in range(l, (l + l_max + 2))]
-        #     values = s[l] * gs_tensor[:, l]
-        #     for idx, val in zip(indices, values):
-        #         r = tf.tensor_scatter_nd_update(r, [idx], [val])
-        #     # r[l:(l + l_max + 1)] += s[l] * gs_tensor[:, l]
-        # r[:l_max] += r[-l_max:] NOTE: not 100% sure if this is correct
-        # r = r[:-l_max]
-
-        # G = np.zeros((self.M*self.N+ l_max, self.M*self.N), dtype=np.complex64)
-
         rows = self.M*self.N+ l_max + 1
         cols = self.M*self.N
         tensor_shape = (rows, cols)
         G_tensor = tf.zeros(tensor_shape, dtype=tf.complex64)
 
         indices = tf.where(tf.linalg.band_part(tf.ones([cols,rows]), 0, l_max))
+        indices = tf.reverse(indices, axis=[1])
 
-        updates = tf.constant(gs.flatten(),dtype=tf.complex64)
+        updates = tf.constant(gs.flatten('F'),dtype=tf.complex64)
 
         G_tensor = tf.tensor_scatter_nd_update(G_tensor, indices, updates)
 
-        # for i in range(self.N * self.M):
-        #     row_indices = tf.range(i, l_max + 1 + i, dtype=tf.int64)
-        #     column_index = tf.constant([i] * (l_max + 1), dtype=tf.int64)
-        #     indices = tf.stack([row_indices, column_index], axis=1)
-        #     # indices = tf.constant([[j, i] for j in range(i, l_max + 1 + i)])
-        #     updates = tf.constant(gs[:, i], dtype=tf.complex64)
-        #     G_tensor = tf.tensor_scatter_nd_update(G_tensor, indices, updates)
-
-            # G[i:l_max+1+i,i] = gs[:,i] 
-        
-        # G[:l_max,:] += G[-l_max:,:] #effect of multipath on the first l_max symbols. NOTE: matches line 74. 
-        # G = G[:-l_max,:]
-
-        # G_tensor = tf.constant(G)
-        # s_reshaped = tf.reshape(s, [self.M, 1])
         s = tf.cast(s, G_tensor.dtype)
         s = tf.expand_dims(s, axis=1)
         r = tf.matmul(G_tensor, s)
         r = r[:cols]
-
-
-        # G_tensor = 
 
         return r
